@@ -6,137 +6,181 @@ import { motion } from 'framer-motion';
 import { 
   UserPlus, 
   Heart, 
-  Calendar, 
-  MapPin, 
-  Phone, 
-  Mail, 
   ArrowLeft,
   Save,
-  Plus,
   Users,
   Droplets,
-  Clock
+  Search,
+  Loader2,
+  MapPin,
+  Phone
 } from 'lucide-react';
-import { mockUsers, mockDonations } from '@/lib/mockData';
-import { getBloodGroupColor, formatDate } from '@/utils/helpers';
+import { useUsers, useCreateUser, useCreateDonation, useDonations } from '@/lib/hooks';
+import { CreateUserForm } from '@/types';
 
-interface DonorFormData {
-  name: string;
-  gender: string;
-  mobile: string;
-  email: string;
-  dateOfBirth: string;
-  bloodGroup: string;
-  city: string;
-  role: string;
-  latitude: number;
-  longitude: number;
-}
+// Helper functions
+const formatDate = (date: Date | string) => {
+  const d = new Date(date);
+  return d.toLocaleDateString();
+};
+
+const getBloodGroupColor = (bloodGroup: string) => {
+  const colors: Record<string, string> = {
+    'A+': 'bg-red-100 text-red-800',
+    'A-': 'bg-red-200 text-red-900',
+    'B+': 'bg-blue-100 text-blue-800',
+    'B-': 'bg-blue-200 text-blue-900',
+    'AB+': 'bg-purple-100 text-purple-800',
+    'AB-': 'bg-purple-200 text-purple-900',
+    'O+': 'bg-green-100 text-green-800',
+    'O-': 'bg-green-200 text-green-900',
+  };
+  return colors[bloodGroup] || 'bg-gray-100 text-gray-800';
+};
 
 interface DonationFormData {
-  donorId: string;
+  userId: string;
   donationType: string;
   donationDate: string;
-  notes: string;
+  bridgeId: string;
+  donationStatus: string;
 }
 
 export default function DonorManagementPage() {
-  const [activeTab, setActiveTab] = useState('add-donor');
-  const [donorFormData, setDonorFormData] = useState<DonorFormData>({
+  const [activeTab, setActiveTab] = useState('view-donors');
+  const [searchTerm, setSearchTerm] = useState('');
+  const [filterRole, setFilterRole] = useState('');
+  const [filterBloodGroup, setFilterBloodGroup] = useState('');
+  const [showSuccess, setShowSuccess] = useState(false);
+  const [currentPage, setCurrentPage] = useState(1);
+  const usersPerPage = 10;
+
+  // Form states
+  const [donorFormData, setDonorFormData] = useState<CreateUserForm>({
     name: '',
-    gender: '',
+    gender: 'Male',
     mobile: '',
-    email: '',
     dateOfBirth: '',
     bloodGroup: '',
     city: '',
-    role: '',
-    latitude: 19.0170,
-    longitude: 72.8477
+    pincode: 400001,
+    role: 'Fighter'
   });
 
   const [donationFormData, setDonationFormData] = useState<DonationFormData>({
-    donorId: '',
-    donationType: '',
+    userId: '',
+    donationType: 'Blood Donation',
     donationDate: new Date().toISOString().split('T')[0],
-    notes: ''
+    bridgeId: 'B100',
+    donationStatus: 'Complete'
   });
 
-  const [isSubmittingDonor, setIsSubmittingDonor] = useState(false);
-  const [isSubmittingDonation, setIsSubmittingDonation] = useState(false);
-  const [showSuccess, setShowSuccess] = useState(false);
+  // Fetch real data using hooks
+  const { 
+    data: usersData, 
+    loading: usersLoading, 
+    error: usersError, 
+    refetch: refetchUsers 
+  } = useUsers({ 
+    page: currentPage, 
+    limit: usersPerPage,
+    role: filterRole || undefined,
+    bloodGroup: filterBloodGroup || undefined
+  });
+
+  const { 
+    data: donationsData, 
+    loading: donationsLoading 
+  } = useDonations({ limit: 5 });
+
+  // Mutations
+  const { 
+    mutate: createUser, 
+    loading: isSubmittingDonor 
+  } = useCreateUser(
+    (newUser) => {
+      setShowSuccess(true);
+      setTimeout(() => setShowSuccess(false), 3000);
+      setDonorFormData({
+        name: '',
+        gender: 'Male',
+        mobile: '',
+        dateOfBirth: '',
+        bloodGroup: '',
+        city: '',
+        pincode: 400001,
+        role: 'Fighter'
+      });
+      refetchUsers();
+    },
+    (error) => {
+      console.error('Error creating user:', error);
+    }
+  );
+
+  const { 
+    mutate: createDonation, 
+    loading: isSubmittingDonation 
+  } = useCreateDonation(
+    (newDonation) => {
+      setShowSuccess(true);
+      setTimeout(() => setShowSuccess(false), 3000);
+      setDonationFormData({
+        userId: '',
+        donationType: 'Blood Donation',
+        donationDate: new Date().toISOString().split('T')[0],
+        bridgeId: 'B100',
+        donationStatus: 'Complete'
+      });
+    },
+    (error) => {
+      console.error('Error creating donation:', error);
+    }
+  );
+
+  const handleDonorSubmit = async (e: React.FormEvent) => {
+    e.preventDefault();
+    await createUser({
+      ...donorFormData,
+      dateOfBirth: new Date(donorFormData.dateOfBirth)
+    });
+  };
+
+  const handleDonationSubmit = async (e: React.FormEvent) => {
+    e.preventDefault();
+    await createDonation({
+      ...donationFormData,
+      donationDate: new Date(donationFormData.donationDate),
+      nextEligibleDate: new Date(Date.now() + 90 * 24 * 60 * 60 * 1000) // 90 days later
+    });
+  };
+
+  // Filter users based on search term
+  const filteredUsers = usersData?.data?.filter(user =>
+    user.name.toLowerCase().includes(searchTerm.toLowerCase()) ||
+    user.mobile.includes(searchTerm) ||
+    user.city.toLowerCase().includes(searchTerm.toLowerCase())
+  ) || [];
 
   const bloodGroups = ['A+', 'A-', 'B+', 'B-', 'AB+', 'AB-', 'O+', 'O-'];
   const genders = ['Male', 'Female', 'Other'];
-  const roles = ['Bridge Donor', 'Emergency Donor', 'Fighter'];
+  const roles = ['Fighter', 'Bridge Donor', 'Emergency Donor'];
   const donationTypes = ['Blood Bridge Donation', 'Emergency Donation', 'Voluntary Donation'];
 
   const handleDonorInputChange = (e: React.ChangeEvent<HTMLInputElement | HTMLSelectElement>) => {
     const { name, value } = e.target;
     setDonorFormData(prev => ({
       ...prev,
-      [name]: value
+      [name]: name === 'pincode' ? parseInt(value) || 0 : value
     }));
   };
 
-  const handleDonationInputChange = (e: React.ChangeEvent<HTMLInputElement | HTMLSelectElement | HTMLTextAreaElement>) => {
+  const handleDonationInputChange = (e: React.ChangeEvent<HTMLInputElement | HTMLSelectElement>) => {
     const { name, value } = e.target;
     setDonationFormData(prev => ({
       ...prev,
       [name]: value
     }));
-  };
-
-  const handleDonorSubmit = async (e: React.FormEvent) => {
-    e.preventDefault();
-    setIsSubmittingDonor(true);
-
-    // Simulate API call
-    await new Promise(resolve => setTimeout(resolve, 1500));
-
-    console.log('New donor data:', donorFormData);
-    
-    setIsSubmittingDonor(false);
-    setShowSuccess(true);
-    
-    // Reset form
-    setDonorFormData({
-      name: '',
-      gender: '',
-      mobile: '',
-      email: '',
-      dateOfBirth: '',
-      bloodGroup: '',
-      city: '',
-      role: '',
-      latitude: 19.0170,
-      longitude: 72.8477
-    });
-
-    setTimeout(() => setShowSuccess(false), 3000);
-  };
-
-  const handleDonationSubmit = async (e: React.FormEvent) => {
-    e.preventDefault();
-    setIsSubmittingDonation(true);
-
-    // Simulate API call
-    await new Promise(resolve => setTimeout(resolve, 1500));
-
-    console.log('New donation data:', donationFormData);
-    
-    setIsSubmittingDonation(false);
-    setShowSuccess(true);
-    
-    // Reset form
-    setDonationFormData({
-      donorId: '',
-      donationType: '',
-      donationDate: new Date().toISOString().split('T')[0],
-      notes: ''
-    });
-
-    setTimeout(() => setShowSuccess(false), 3000);
   };
 
   return (
@@ -149,13 +193,8 @@ export default function DonorManagementPage() {
               <Link href="/dashboard" className="mr-4">
                 <ArrowLeft className="h-6 w-6 text-gray-600 hover:text-gray-900" />
               </Link>
-              <UserPlus className="h-8 w-8 text-red-600" />
+              <Heart className="h-8 w-8 text-red-600" />
               <span className="ml-2 text-xl font-bold text-gray-900">Donor Management</span>
-            </div>
-            <div className="flex items-center space-x-4">
-              <div className="text-sm text-gray-600">
-                Total Donors: {mockUsers.length}
-              </div>
             </div>
           </div>
         </div>
@@ -167,115 +206,188 @@ export default function DonorManagementPage() {
           <motion.div
             initial={{ opacity: 0, y: -20 }}
             animate={{ opacity: 1, y: 0 }}
-            exit={{ opacity: 0, y: -20 }}
-            className="mb-6 p-4 bg-green-50 border border-green-200 rounded-lg"
+            className="mb-6 p-4 bg-green-100 border border-green-400 text-green-700 rounded-lg"
           >
-            <div className="flex items-center">
-              <Heart className="h-5 w-5 text-green-600 mr-2" />
-              <span className="text-green-800 font-medium">
-                {activeTab === 'add-donor' ? 'Donor added successfully!' : 'Donation recorded successfully!'}
-              </span>
-            </div>
+            <p className="font-medium">Success! Operation completed successfully.</p>
           </motion.div>
         )}
 
-        {/* Stats Overview */}
-        <div className="grid grid-cols-1 md:grid-cols-3 gap-6 mb-8">
-          <motion.div
-            initial={{ opacity: 0, y: 20 }}
-            animate={{ opacity: 1, y: 0 }}
-            className="card"
-          >
-            <div className="flex items-center">
-              <div className="p-3 bg-blue-100 rounded-lg">
-                <Users className="h-6 w-6 text-blue-600" />
-              </div>
-              <div className="ml-4">
-                <p className="text-sm font-medium text-gray-600">Total Donors</p>
-                <p className="text-2xl font-bold text-gray-900">{mockUsers.length}</p>
-              </div>
-            </div>
-          </motion.div>
-
-          <motion.div
-            initial={{ opacity: 0, y: 20 }}
-            animate={{ opacity: 1, y: 0 }}
-            transition={{ delay: 0.1 }}
-            className="card"
-          >
-            <div className="flex items-center">
-              <div className="p-3 bg-green-100 rounded-lg">
-                <Droplets className="h-6 w-6 text-green-600" />
-              </div>
-              <div className="ml-4">
-                <p className="text-sm font-medium text-gray-600">Total Donations</p>
-                <p className="text-2xl font-bold text-gray-900">{mockDonations.length}</p>
-              </div>
-            </div>
-          </motion.div>
-
-          <motion.div
-            initial={{ opacity: 0, y: 20 }}
-            animate={{ opacity: 1, y: 0 }}
-            transition={{ delay: 0.2 }}
-            className="card"
-          >
-            <div className="flex items-center">
-              <div className="p-3 bg-purple-100 rounded-lg">
-                <Clock className="h-6 w-6 text-purple-600" />
-              </div>
-              <div className="ml-4">
-                <p className="text-sm font-medium text-gray-600">Active Donors</p>
-                <p className="text-2xl font-bold text-gray-900">
-                  {mockUsers.filter(user => user.isActive).length}
-                </p>
-              </div>
-            </div>
-          </motion.div>
-        </div>
+        {/* Error Message */}
+        {usersError && (
+          <div className="mb-6 p-4 bg-red-50 border border-red-200 text-red-700 rounded-lg">
+            <p className="font-medium">Error loading data: {usersError}</p>
+          </div>
+        )}
 
         {/* Navigation Tabs */}
-        <div className="bg-white rounded-lg shadow-sm border border-gray-200 mb-8">
-          <div className="border-b border-gray-200">
-            <nav className="flex space-x-8 px-6">
+        <div className="border-b border-gray-200 mb-8">
+          <nav className="-mb-px flex space-x-8">
+            {[
+              { id: 'view-donors', name: 'View Donors', icon: Users },
+              { id: 'add-donor', name: 'Add Donor', icon: UserPlus },
+              { id: 'add-donation', name: 'Record Donation', icon: Droplets },
+            ].map((tab) => (
               <button
-                onClick={() => setActiveTab('add-donor')}
-                className={`flex items-center py-4 px-1 border-b-2 font-medium text-sm ${
-                  activeTab === 'add-donor'
+                key={tab.id}
+                onClick={() => setActiveTab(tab.id)}
+                className={`flex items-center space-x-2 py-4 px-1 border-b-2 font-medium text-sm ${
+                  activeTab === tab.id
                     ? 'border-red-500 text-red-600'
                     : 'border-transparent text-gray-500 hover:text-gray-700 hover:border-gray-300'
                 }`}
               >
-                <UserPlus className="h-4 w-4 mr-2" />
-                Add Donor
+                <tab.icon className="h-5 w-5" />
+                <span>{tab.name}</span>
               </button>
-              <button
-                onClick={() => setActiveTab('record-donation')}
-                className={`flex items-center py-4 px-1 border-b-2 font-medium text-sm ${
-                  activeTab === 'record-donation'
-                    ? 'border-red-500 text-red-600'
-                    : 'border-transparent text-gray-500 hover:text-gray-700 hover:border-gray-300'
-                }`}
-              >
-                <Heart className="h-4 w-4 mr-2" />
-                Record Donation
-              </button>
-            </nav>
-          </div>
+            ))}
+          </nav>
         </div>
 
-        {/* Content based on active tab */}
-        {activeTab === 'add-donor' && (
-          <div className="grid grid-cols-1 lg:grid-cols-2 gap-8">
-            {/* Add Donor Form */}
-            <div className="card">
-              <div className="flex items-center mb-6">
-                <UserPlus className="h-6 w-6 text-red-600 mr-3" />
-                <h2 className="text-xl font-semibold text-gray-900">Add New Donor</h2>
+        {/* Tab Content */}
+        {activeTab === 'view-donors' && (
+          <div className="space-y-6">
+            {/* Stats Cards */}
+            <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
+              <div className="bg-white p-6 rounded-lg shadow-sm border">
+                <div className="flex items-center">
+                  <Users className="h-8 w-8 text-blue-600" />
+                  <div className="ml-4">
+                    <p className="text-sm text-gray-600">Total Users</p>
+                    <p className="text-2xl font-bold text-gray-900">
+                      {usersLoading ? <Loader2 className="h-6 w-6 animate-spin" /> : usersData?.total || 0}
+                    </p>
+                  </div>
+                </div>
               </div>
 
+              <div className="bg-white p-6 rounded-lg shadow-sm border">
+                <div className="flex items-center">
+                  <Droplets className="h-8 w-8 text-red-600" />
+                  <div className="ml-4">
+                    <p className="text-sm text-gray-600">Total Donations</p>
+                    <p className="text-2xl font-bold text-gray-900">
+                      {donationsLoading ? <Loader2 className="h-6 w-6 animate-spin" /> : donationsData?.total || 0}
+                    </p>
+                  </div>
+                </div>
+              </div>
+
+              <div className="bg-white p-6 rounded-lg shadow-sm border">
+                <div className="flex items-center">
+                  <Heart className="h-8 w-8 text-green-600" />
+                  <div className="ml-4">
+                    <p className="text-sm text-gray-600">Active Donors</p>
+                    <p className="text-2xl font-bold text-gray-900">
+                      {usersData?.data?.length || 0}
+                    </p>
+                  </div>
+                </div>
+              </div>
+            </div>
+
+            {/* Search and Filters */}
+            <div className="bg-white p-6 rounded-lg shadow-sm border">
+              <div className="flex flex-col md:flex-row gap-4">
+                <div className="flex-1">
+                  <div className="relative">
+                    <Search className="absolute left-3 top-1/2 transform -translate-y-1/2 h-4 w-4 text-gray-400" />
+                    <input
+                      type="text"
+                      placeholder="Search by name, mobile, or city..."
+                      value={searchTerm}
+                      onChange={(e) => setSearchTerm(e.target.value)}
+                      className="pl-10 pr-4 py-2 w-full border border-gray-300 rounded-lg focus:ring-2 focus:ring-red-500 focus:border-transparent"
+                    />
+                  </div>
+                </div>
+                
+                <select
+                  value={filterRole}
+                  onChange={(e) => setFilterRole(e.target.value)}
+                  className="px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-red-500 focus:border-transparent"
+                >
+                  <option value="">All Roles</option>
+                  {roles.map(role => (
+                    <option key={role} value={role}>{role}</option>
+                  ))}
+                </select>
+
+                <select
+                  value={filterBloodGroup}
+                  onChange={(e) => setFilterBloodGroup(e.target.value)}
+                  className="px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-red-500 focus:border-transparent"
+                >
+                  <option value="">All Blood Groups</option>
+                  {bloodGroups.map(bg => (
+                    <option key={bg} value={bg}>{bg}</option>
+                  ))}
+                </select>
+              </div>
+            </div>
+
+            {/* Users List */}
+            <div className="bg-white rounded-lg shadow-sm border">
+              <div className="p-6 border-b border-gray-100">
+                <h3 className="text-lg font-semibold text-gray-900">Donors List</h3>
+              </div>
+              <div className="p-6">
+                {usersLoading ? (
+                  <div className="flex justify-center py-8">
+                    <Loader2 className="h-8 w-8 animate-spin text-gray-400" />
+                  </div>
+                ) : filteredUsers.length > 0 ? (
+                  <div className="space-y-4">
+                    {filteredUsers.map((user) => (
+                      <div key={user.id} className="flex items-center justify-between p-4 bg-gray-50 rounded-lg">
+                        <div className="flex-1">
+                          <div className="flex items-start justify-between">
+                            <div>
+                              <h4 className="font-medium text-gray-900">{user.name}</h4>
+                              <div className="flex items-center space-x-4 mt-1 text-sm text-gray-600">
+                                <span className="flex items-center">
+                                  <Phone className="h-4 w-4 mr-1" />
+                                  {user.mobile}
+                                </span>
+                                <span className="flex items-center">
+                                  <MapPin className="h-4 w-4 mr-1" />
+                                  {user.city}
+                                </span>
+                              </div>
+                              <div className="flex items-center space-x-2 mt-2">
+                                <span className={`inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium ${getBloodGroupColor(user.bloodGroup)}`}>
+                                  {user.bloodGroup}
+                                </span>
+                                <span className="inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium bg-blue-100 text-blue-800">
+                                  {user.role}
+                                </span>
+                                <span className="text-xs text-gray-500">
+                                  {user.gender} • {new Date().getFullYear() - new Date(user.dateOfBirth).getFullYear()} years
+                                </span>
+                              </div>
+                            </div>
+                          </div>
+                        </div>
+                      </div>
+                    ))}
+                  </div>
+                ) : (
+                  <div className="text-center py-8">
+                    <Users className="h-12 w-12 text-gray-400 mx-auto mb-4" />
+                    <p className="text-gray-500">No donors found</p>
+                  </div>
+                )}
+              </div>
+            </div>
+          </div>
+        )}
+
+        {activeTab === 'add-donor' && (
+          <div className="max-w-2xl mx-auto">
+            <div className="bg-white rounded-lg shadow-sm border p-6">
+              <h3 className="text-lg font-semibold text-gray-900 mb-6">Add New Donor</h3>
+              
               <form onSubmit={handleDonorSubmit} className="space-y-6">
-                <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
                   <div>
                     <label className="block text-sm font-medium text-gray-700 mb-2">
                       Full Name *
@@ -283,10 +395,10 @@ export default function DonorManagementPage() {
                     <input
                       type="text"
                       name="name"
+                      required
                       value={donorFormData.name}
                       onChange={handleDonorInputChange}
-                      required
-                      className="input-field"
+                      className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-red-500 focus:border-transparent"
                       placeholder="Enter full name"
                     />
                   </div>
@@ -297,20 +409,17 @@ export default function DonorManagementPage() {
                     </label>
                     <select
                       name="gender"
+                      required
                       value={donorFormData.gender}
                       onChange={handleDonorInputChange}
-                      required
-                      className="input-field"
+                      className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-red-500 focus:border-transparent"
                     >
-                      <option value="">Select Gender</option>
                       {genders.map(gender => (
                         <option key={gender} value={gender}>{gender}</option>
                       ))}
                     </select>
                   </div>
-                </div>
 
-                <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
                   <div>
                     <label className="block text-sm font-medium text-gray-700 mb-2">
                       Mobile Number *
@@ -318,30 +427,14 @@ export default function DonorManagementPage() {
                     <input
                       type="tel"
                       name="mobile"
+                      required
                       value={donorFormData.mobile}
                       onChange={handleDonorInputChange}
-                      required
-                      className="input-field"
-                      placeholder="+91 98765 43210"
+                      className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-red-500 focus:border-transparent"
+                      placeholder="+91-9876543210"
                     />
                   </div>
 
-                  <div>
-                    <label className="block text-sm font-medium text-gray-700 mb-2">
-                      Email Address
-                    </label>
-                    <input
-                      type="email"
-                      name="email"
-                      value={donorFormData.email}
-                      onChange={handleDonorInputChange}
-                      className="input-field"
-                      placeholder="donor@example.com"
-                    />
-                  </div>
-                </div>
-
-                <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
                   <div>
                     <label className="block text-sm font-medium text-gray-700 mb-2">
                       Date of Birth *
@@ -349,10 +442,10 @@ export default function DonorManagementPage() {
                     <input
                       type="date"
                       name="dateOfBirth"
+                      required
                       value={donorFormData.dateOfBirth}
                       onChange={handleDonorInputChange}
-                      required
-                      className="input-field"
+                      className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-red-500 focus:border-transparent"
                     />
                   </div>
 
@@ -362,20 +455,18 @@ export default function DonorManagementPage() {
                     </label>
                     <select
                       name="bloodGroup"
+                      required
                       value={donorFormData.bloodGroup}
                       onChange={handleDonorInputChange}
-                      required
-                      className="input-field"
+                      className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-red-500 focus:border-transparent"
                     >
                       <option value="">Select Blood Group</option>
-                      {bloodGroups.map(group => (
-                        <option key={group} value={group}>{group}</option>
+                      {bloodGroups.map(bg => (
+                        <option key={bg} value={bg}>{bg}</option>
                       ))}
                     </select>
                   </div>
-                </div>
 
-                <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
                   <div>
                     <label className="block text-sm font-medium text-gray-700 mb-2">
                       City *
@@ -383,11 +474,26 @@ export default function DonorManagementPage() {
                     <input
                       type="text"
                       name="city"
+                      required
                       value={donorFormData.city}
                       onChange={handleDonorInputChange}
-                      required
-                      className="input-field"
+                      className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-red-500 focus:border-transparent"
                       placeholder="Enter city"
+                    />
+                  </div>
+
+                  <div>
+                    <label className="block text-sm font-medium text-gray-700 mb-2">
+                      PIN Code *
+                    </label>
+                    <input
+                      type="number"
+                      name="pincode"
+                      required
+                      value={donorFormData.pincode}
+                      onChange={handleDonorInputChange}
+                      className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-red-500 focus:border-transparent"
+                      placeholder="400001"
                     />
                   </div>
 
@@ -397,12 +503,11 @@ export default function DonorManagementPage() {
                     </label>
                     <select
                       name="role"
+                      required
                       value={donorFormData.role}
                       onChange={handleDonorInputChange}
-                      required
-                      className="input-field"
+                      className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-red-500 focus:border-transparent"
                     >
-                      <option value="">Select Role</option>
                       {roles.map(role => (
                         <option key={role} value={role}>{role}</option>
                       ))}
@@ -410,237 +515,123 @@ export default function DonorManagementPage() {
                   </div>
                 </div>
 
-                <button
-                  type="submit"
-                  disabled={isSubmittingDonor}
-                  className="btn-primary w-full flex items-center justify-center"
-                >
-                  {isSubmittingDonor ? (
-                    <>
-                      <div className="animate-spin rounded-full h-4 w-4 border-b-2 border-white mr-2"></div>
-                      Adding Donor...
-                    </>
-                  ) : (
-                    <>
-                      <Save className="h-4 w-4 mr-2" />
-                      Add Donor
-                    </>
-                  )}
-                </button>
+                <div className="flex justify-end">
+                  <button
+                    type="submit"
+                    disabled={isSubmittingDonor}
+                    className="flex items-center space-x-2 px-6 py-2 bg-red-600 text-white rounded-lg hover:bg-red-700 disabled:opacity-50 disabled:cursor-not-allowed"
+                  >
+                    {isSubmittingDonor ? (
+                      <Loader2 className="h-4 w-4 animate-spin" />
+                    ) : (
+                      <Save className="h-4 w-4" />
+                    )}
+                    <span>{isSubmittingDonor ? 'Saving...' : 'Save Donor'}</span>
+                  </button>
+                </div>
               </form>
-            </div>
-
-            {/* Donor Guidelines */}
-            <div className="space-y-6">
-              <div className="card">
-                <h3 className="text-lg font-semibold text-gray-900 mb-4">Donor Eligibility Guidelines</h3>
-                <div className="space-y-3 text-sm text-gray-600">
-                  <div className="flex items-start">
-                    <Calendar className="h-4 w-4 text-red-600 mr-2 mt-0.5" />
-                    <span>Age must be between 18-65 years</span>
-                  </div>
-                  <div className="flex items-start">
-                    <Heart className="h-4 w-4 text-red-600 mr-2 mt-0.5" />
-                    <span>Weight must be at least 50 kg</span>
-                  </div>
-                  <div className="flex items-start">
-                    <Clock className="h-4 w-4 text-red-600 mr-2 mt-0.5" />
-                    <span>Minimum 56 days gap between donations</span>
-                  </div>
-                  <div className="flex items-start">
-                    <MapPin className="h-4 w-4 text-red-600 mr-2 mt-0.5" />
-                    <span>Must be in good health condition</span>
-                  </div>
-                </div>
-              </div>
-
-              <div className="card">
-                <h3 className="text-lg font-semibold text-gray-900 mb-4">Recent Donors</h3>
-                <div className="space-y-3">
-                  {mockUsers.slice(0, 5).map((donor) => (
-                    <div key={donor.id} className="flex items-center justify-between p-3 border border-gray-200 rounded-lg">
-                      <div>
-                        <p className="font-medium text-gray-900">{donor.name}</p>
-                        <p className="text-sm text-gray-600">{donor.city} • {donor.role}</p>
-                      </div>
-                      <div className="flex items-center space-x-2">
-                        <span className={`px-2 py-1 rounded-full text-xs font-medium ${getBloodGroupColor(donor.bloodGroup)}`}>
-                          {donor.bloodGroup}
-                        </span>
-                        <span className={`px-2 py-1 rounded-full text-xs font-medium ${
-                          donor.isActive ? 'bg-green-100 text-green-800' : 'bg-gray-100 text-gray-800'
-                        }`}>
-                          {donor.isActive ? 'Active' : 'Inactive'}
-                        </span>
-                      </div>
-                    </div>
-                  ))}
-                </div>
-              </div>
             </div>
           </div>
         )}
 
-        {activeTab === 'record-donation' && (
-          <div className="grid grid-cols-1 lg:grid-cols-2 gap-8">
-            {/* Record Donation Form */}
-            <div className="card">
-              <div className="flex items-center mb-6">
-                <Heart className="h-6 w-6 text-red-600 mr-3" />
-                <h2 className="text-xl font-semibold text-gray-900">Record Blood Donation</h2>
-              </div>
-
+        {activeTab === 'add-donation' && (
+          <div className="max-w-2xl mx-auto">
+            <div className="bg-white rounded-lg shadow-sm border p-6">
+              <h3 className="text-lg font-semibold text-gray-900 mb-6">Record New Donation</h3>
+              
               <form onSubmit={handleDonationSubmit} className="space-y-6">
                 <div>
                   <label className="block text-sm font-medium text-gray-700 mb-2">
-                    Select Donor *
+                    Donor User ID *
+                  </label>
+                  <input
+                    type="text"
+                    name="userId"
+                    required
+                    value={donationFormData.userId}
+                    onChange={handleDonationInputChange}
+                    className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-red-500 focus:border-transparent"
+                    placeholder="Enter user ID (e.g., U100)"
+                  />
+                </div>
+
+                <div>
+                  <label className="block text-sm font-medium text-gray-700 mb-2">
+                    Donation Type *
                   </label>
                   <select
-                    name="donorId"
-                    value={donationFormData.donorId}
-                    onChange={handleDonationInputChange}
+                    name="donationType"
                     required
-                    className="input-field"
+                    value={donationFormData.donationType}
+                    onChange={handleDonationInputChange}
+                    className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-red-500 focus:border-transparent"
                   >
-                    <option value="">Select a donor</option>
-                    {mockUsers.filter(user => user.isActive).map(donor => (
-                      <option key={donor.id} value={donor.id}>
-                        {donor.name} - {donor.bloodGroup} ({donor.city})
-                      </option>
+                    {donationTypes.map(type => (
+                      <option key={type} value={type}>{type}</option>
                     ))}
                   </select>
                 </div>
 
-                <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-                  <div>
-                    <label className="block text-sm font-medium text-gray-700 mb-2">
-                      Donation Type *
-                    </label>
-                    <select
-                      name="donationType"
-                      value={donationFormData.donationType}
-                      onChange={handleDonationInputChange}
-                      required
-                      className="input-field"
-                    >
-                      <option value="">Select Type</option>
-                      {donationTypes.map(type => (
-                        <option key={type} value={type}>{type}</option>
-                      ))}
-                    </select>
-                  </div>
-
-                  <div>
-                    <label className="block text-sm font-medium text-gray-700 mb-2">
-                      Donation Date *
-                    </label>
-                    <input
-                      type="date"
-                      name="donationDate"
-                      value={donationFormData.donationDate}
-                      onChange={handleDonationInputChange}
-                      required
-                      className="input-field"
-                    />
-                  </div>
+                <div>
+                  <label className="block text-sm font-medium text-gray-700 mb-2">
+                    Donation Date *
+                  </label>
+                  <input
+                    type="date"
+                    name="donationDate"
+                    required
+                    value={donationFormData.donationDate}
+                    onChange={handleDonationInputChange}
+                    className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-red-500 focus:border-transparent"
+                  />
                 </div>
 
                 <div>
                   <label className="block text-sm font-medium text-gray-700 mb-2">
-                    Notes
+                    Bridge ID
                   </label>
-                  <textarea
-                    name="notes"
-                    value={donationFormData.notes}
+                  <input
+                    type="text"
+                    name="bridgeId"
+                    value={donationFormData.bridgeId}
                     onChange={handleDonationInputChange}
-                    rows={3}
-                    className="input-field"
-                    placeholder="Any additional notes about the donation..."
+                    className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-red-500 focus:border-transparent"
+                    placeholder="B100"
                   />
                 </div>
 
-                <button
-                  type="submit"
-                  disabled={isSubmittingDonation}
-                  className="btn-primary w-full flex items-center justify-center"
-                >
-                  {isSubmittingDonation ? (
-                    <>
-                      <div className="animate-spin rounded-full h-4 w-4 border-b-2 border-white mr-2"></div>
-                      Recording Donation...
-                    </>
-                  ) : (
-                    <>
-                      <Plus className="h-4 w-4 mr-2" />
-                      Record Donation
-                    </>
-                  )}
-                </button>
+                <div>
+                  <label className="block text-sm font-medium text-gray-700 mb-2">
+                    Status *
+                  </label>
+                  <select
+                    name="donationStatus"
+                    required
+                    value={donationFormData.donationStatus}
+                    onChange={handleDonationInputChange}
+                    className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-red-500 focus:border-transparent"
+                  >
+                    <option value="Complete">Complete</option>
+                    <option value="Pending">Pending</option>
+                    <option value="Cancelled">Cancelled</option>
+                  </select>
+                </div>
+
+                <div className="flex justify-end">
+                  <button
+                    type="submit"
+                    disabled={isSubmittingDonation}
+                    className="flex items-center space-x-2 px-6 py-2 bg-red-600 text-white rounded-lg hover:bg-red-700 disabled:opacity-50 disabled:cursor-not-allowed"
+                  >
+                    {isSubmittingDonation ? (
+                      <Loader2 className="h-4 w-4 animate-spin" />
+                    ) : (
+                      <Save className="h-4 w-4" />
+                    )}
+                    <span>{isSubmittingDonation ? 'Recording...' : 'Record Donation'}</span>
+                  </button>
+                </div>
               </form>
-            </div>
-
-            {/* Recent Donations */}
-            <div className="space-y-6">
-              <div className="card">
-                <h3 className="text-lg font-semibold text-gray-900 mb-4">Recent Donations</h3>
-                <div className="space-y-3">
-                  {mockDonations.slice(0, 5).map((donation) => {
-                    const donor = mockUsers.find(user => user.id === donation.userId);
-                    return (
-                      <div key={donation.id} className="flex items-center justify-between p-3 border border-gray-200 rounded-lg">
-                        <div>
-                          <p className="font-medium text-gray-900">{donor?.name || 'Unknown Donor'}</p>
-                          <p className="text-sm text-gray-600">
-                            {donation.donationType} • {formatDate(donation.donationDate)}
-                          </p>
-                        </div>
-                        <div className="flex items-center space-x-2">
-                          <span className={`px-2 py-1 rounded-full text-xs font-medium ${
-                            donation.status === 'Complete' ? 'bg-green-100 text-green-800' :
-                            donation.status === 'Pending' ? 'bg-yellow-100 text-yellow-800' :
-                            'bg-red-100 text-red-800'
-                          }`}>
-                            {donation.status}
-                          </span>
-                        </div>
-                      </div>
-                    );
-                  })}
-                </div>
-              </div>
-
-              <div className="card">
-                <h3 className="text-lg font-semibold text-gray-900 mb-4">Donation Statistics</h3>
-                <div className="space-y-3 text-sm">
-                  <div className="flex justify-between">
-                    <span className="text-gray-600">Total Donations:</span>
-                    <span className="font-medium">{mockDonations.length}</span>
-                  </div>
-                  <div className="flex justify-between">
-                    <span className="text-gray-600">Completed:</span>
-                    <span className="font-medium text-green-600">
-                      {mockDonations.filter(d => d.status === 'Complete').length}
-                    </span>
-                  </div>
-                  <div className="flex justify-between">
-                    <span className="text-gray-600">Pending:</span>
-                    <span className="font-medium text-yellow-600">
-                      {mockDonations.filter(d => d.status === 'Pending').length}
-                    </span>
-                  </div>
-                  <div className="flex justify-between">
-                    <span className="text-gray-600">This Month:</span>
-                    <span className="font-medium">
-                      {mockDonations.filter(d => {
-                        const donationDate = new Date(d.donationDate);
-                        const now = new Date();
-                        return donationDate.getMonth() === now.getMonth() && 
-                               donationDate.getFullYear() === now.getFullYear();
-                      }).length}
-                    </span>
-                  </div>
-                </div>
-              </div>
             </div>
           </div>
         )}

@@ -1,0 +1,235 @@
+// This is your Prisma schema file,
+// learn more about it in the docs: https://pris.ly/d/prisma-schema
+
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "sqlite"
+  url      = "file:./bloodlink.db"
+}
+
+// User model - Main users table
+model User {
+  id          String   @id @default(cuid())
+  userId      String   @unique // Original user_id from dataset (U100, U101, etc.)
+  name        String
+  email       String?  @unique // Added for OAuth
+  image       String?  // Added for OAuth profile picture
+  gender      String   // "Male", "Female", "Other"
+  mobile      String   @unique
+  dateOfBirth DateTime?
+  bloodGroup  String?  // "A+", "A-", "B+", "B-", "AB+", "AB-", "O+", "O-"
+  city        String?
+  pincode     Int?
+  role        String   @default("User") // "Fighter", "Bridge Donor", "Emergency Donor", "Admin", "Hospital Staff", "User"
+  insertTime  DateTime @default(now())
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+
+  // OAuth Relations
+  accounts      Account[]
+  sessions      Session[]
+
+  // Relations
+  bridgeFighterInfo BridgeFighterInfo[] // Changed to array since user can have multiple bridges
+  bridgeMappings    BridgeUserMapping[]
+  donations         DonationTracker[]
+  emergencyRequests EmergencyRequest[]
+  notifications     Notification[]
+
+  @@map("users")
+}
+
+// NextAuth.js required models
+model Account {
+  id                String  @id @default(cuid())
+  userId            String
+  type              String
+  provider          String
+  providerAccountId String
+  refresh_token     String?
+  access_token      String?
+  expires_at        Int?
+  token_type        String?
+  scope             String?
+  id_token          String?
+  session_state     String?
+
+  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@unique([provider, providerAccountId])
+  @@map("accounts")
+}
+
+model Session {
+  id           String   @id @default(cuid())
+  sessionToken String   @unique
+  userId       String
+  expires      DateTime
+  user         User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@map("sessions")
+}
+
+model VerificationToken {
+  identifier String
+  token      String   @unique
+  expires    DateTime
+
+  @@unique([identifier, token])
+  @@map("verificationtokens")
+}
+
+// Bridge Fighter Information
+model BridgeFighterInfo {
+  id              Int        @id @default(autoincrement())
+  bridgeId        String     @unique // B100, B101, etc.
+  bridgeName      String
+  userId          String     // Removed @unique - users can be in multiple bridges
+  bloodGroup      String     // "A+", "A-", "B+", "B-", "AB+", "AB-", "O+", "O-"
+  frequencyInDays String     // "15 Days", "20 Days", "30 Days"
+  noUnits         Int
+  isActive        Boolean    @default(true)
+  createdAt       DateTime   @default(now())
+  updatedAt       DateTime   @updatedAt
+
+  // Relations
+  user           User                @relation(fields: [userId], references: [userId])
+  bridgeMappings BridgeUserMapping[]
+  donations      DonationTracker[]
+
+  @@map("bridge_fighter_info")
+}
+
+// Mapping between bridges and users with their roles
+model BridgeUserMapping {
+  id       Int      @id @default(autoincrement())
+  bridgeId String
+  userId   String
+  role     String   // "Fighter", "Bridge Donor", "Emergency Donor"
+  isActive Boolean  @default(true)
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  // Relations
+  user              User              @relation(fields: [userId], references: [userId])
+  bridgeFighterInfo BridgeFighterInfo @relation(fields: [bridgeId], references: [bridgeId])
+
+  @@unique([bridgeId, userId])
+  @@map("bridge_user_mappings")
+}
+
+// Donation tracking
+model DonationTracker {
+  id                 Int            @id @default(autoincrement())
+  userId             String
+  donationDate       DateTime
+  nextEligibleDate   DateTime
+  donationType       String         // "Blood Bridge Donation", "Voluntary Donation", "Emergency Donation"
+  bridgeId           String?
+  donationStatus     String         // "Pending", "Complete", "Rejected", "Cancelled"
+  units              Int            @default(1)
+  location           String?
+  notes              String?
+  createdAt          DateTime       @default(now())
+  updatedAt          DateTime       @updatedAt
+
+  // Relations
+  user              User               @relation(fields: [userId], references: [userId])
+  bridgeFighterInfo BridgeFighterInfo? @relation(fields: [bridgeId], references: [bridgeId])
+
+  @@map("donation_tracker")
+}
+
+// Emergency blood requests
+model EmergencyRequest {
+  id              String           @id @default(cuid())
+  requesterId     String
+  patientName     String
+  bloodGroup      String           // "A+", "A-", "B+", "B-", "AB+", "AB-", "O+", "O-"
+  unitsRequired   Int
+  urgencyLevel    String           // "Low", "Medium", "High", "Critical"
+  location        String
+  contactNumber   String
+  hospitalName    String?
+  status          String           @default("Pending") // "Pending", "Fulfilled", "Cancelled"
+  description     String?
+  requiredBy      DateTime
+  createdAt       DateTime         @default(now())
+  updatedAt       DateTime         @updatedAt
+
+  // Relations
+  requester User           @relation(fields: [requesterId], references: [userId])
+  responses RequestResponse[]
+
+  @@map("emergency_requests")
+}
+
+// Responses to emergency requests
+model RequestResponse {
+  id               String   @id @default(cuid())
+  requestId        String
+  donorId          String
+  responseType     String   // "Willing to Donate", "Cannot Donate", "Partial Units"
+  message          String?
+  availableUnits   Int      @default(1)
+  estimatedArrival DateTime?
+  createdAt        DateTime @default(now())
+  updatedAt        DateTime @updatedAt
+
+  // Relations
+  request EmergencyRequest @relation(fields: [requestId], references: [id])
+
+  @@map("request_responses")
+}
+
+// Notifications
+model Notification {
+  id        String           @id @default(cuid())
+  userId    String
+  title     String
+  message   String
+  type      String           // "Emergency Request", "Donation Reminder", "General"
+  isRead    Boolean          @default(false)
+  priority  String           @default("Normal") // "Low", "Normal", "High", "Critical"
+  createdAt DateTime         @default(now())
+  updatedAt DateTime         @updatedAt
+
+  // Relations
+  user User @relation(fields: [userId], references: [userId])
+
+  @@map("notifications")
+}
+
+// Hospital information
+model Hospital {
+  id          String   @id @default(cuid())
+  name        String
+  address     String
+  city        String
+  pincode     Int
+  contactNumber String
+  bloodBankInfo String?
+  isVerified  Boolean  @default(false)
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+
+  @@map("hospitals")
+}
+
+// Blood inventory tracking
+model BloodInventory {
+  id         String     @id @default(cuid())
+  bloodGroup String     // "A+", "A-", "B+", "B-", "AB+", "AB-", "O+", "O-"
+  units      Int
+  location   String
+  hospitalId String?
+  expiryDate DateTime
+  status     String     @default("Available") // "Available", "Reserved", "Expired", "Used"
+  createdAt  DateTime   @default(now())
+  updatedAt  DateTime   @updatedAt
+
+  @@map("blood_inventory")
+}

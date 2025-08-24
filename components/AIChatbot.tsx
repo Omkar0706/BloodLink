@@ -2,7 +2,9 @@
 
 import { useState, useRef, useEffect } from 'react';
 import { motion, AnimatePresence } from 'framer-motion';
-import { 
+imporTop Match: ${topMatch.user.name}
+📍 Distance: ${topMatch.distance} km away
+📞 Contact: ${topMatch.user.mobile} 
   MessageCircle, 
   X, 
   Send, 
@@ -13,7 +15,7 @@ import {
   User,
   Navigation
 } from 'lucide-react';
-import { mockUsers, mockDonations } from '@/lib/mockData';
+import { useUsers, useDonations } from '@/lib/hooks';
 import { findMatchingDonors, getBloodGroupColor, formatDate } from '@/utils/helpers';
 import { EmergencyRequest, DonorMatch } from '@/types';
 
@@ -39,6 +41,10 @@ export default function AIChatbot() {
   const [inputValue, setInputValue] = useState('');
   const [isTyping, setIsTyping] = useState(false);
   const messagesEndRef = useRef<HTMLDivElement>(null);
+  
+  // Get real data from API
+  const { data: usersData } = useUsers({ limit: 100 });
+  const { data: donationsData } = useDonations({ limit: 500 });
 
   const scrollToBottom = () => {
     messagesEndRef.current?.scrollIntoView({ behavior: 'smooth' });
@@ -96,21 +102,28 @@ export default function AIChatbot() {
     // Create emergency request
     const emergencyRequest: EmergencyRequest = {
       id: `emergency-${Date.now()}`,
-      requesterName: 'Emergency Request',
-      requesterContact: 'Emergency Contact',
+      requesterId: 'ai-chatbot',
+      patientName: 'Emergency Patient',
       bloodGroup: bloodGroup as any,
-      units: 1,
-      urgency: urgency as any,
+      unitsRequired: 1,
+      urgencyLevel: urgency as any,
       location: `${location} Hospital`,
-      latitude: getCityCoordinates(location).lat,
-      longitude: getCityCoordinates(location).lng,
+      contactNumber: '911',
       status: 'Pending',
-      createdAt: new Date().toISOString(),
-      updatedAt: new Date().toISOString()
+      description: `Emergency blood request via AI chatbot`,
+      requiredBy: new Date(),
+      createdAt: new Date(),
+      updatedAt: new Date()
     };
 
-    // Find matching donors
-    const matches = findMatchingDonors(emergencyRequest, mockUsers, mockDonations);
+    // Find matching donors using real data
+    if (!usersData?.data || !donationsData?.data) {
+      return await simulateTyping(
+        "I'm currently unable to access the donor database. Please try again in a moment."
+      );
+    }
+    
+    const matches = findMatchingDonors(usersData.data, donationsData.data, emergencyRequest);
 
     if (matches.length === 0) {
       return await simulateTyping(

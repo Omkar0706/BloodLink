@@ -1,112 +1,88 @@
+// Database types matching our Prisma schema
 export interface User {
   id: string;
-  name: string;
-  gender: 'Male' | 'Female' | 'Other';
-  mobile: string;
-  dateOfBirth: string;
-  bloodGroup: BloodGroup;
-  city: string;
-  role: UserRole;
-  latitude?: number;
-  longitude?: number;
-  isActive: boolean;
-  createdAt: string;
-  updatedAt: string;
-}
-
-export interface Bridge {
-  id: string;
-  name: string;
-  location: string;
-  latitude: number;
-  longitude: number;
-  isActive: boolean;
-  donorCount: number;
-  createdAt: string;
-  updatedAt: string;
-}
-
-export interface Donation {
-  id: string;
   userId: string;
-  bridgeId: string;
-  donationDate: string;
-  donationType: DonationType;
-  status: DonationStatus;
-  nextEligibleDate: string;
-  notes?: string;
-  createdAt: string;
-  updatedAt: string;
+  name: string;
+  gender: string;
+  mobile: string;
+  dateOfBirth: Date;
+  bloodGroup: string;
+  city: string;
+  pincode: number;
+  role: string;
+  insertTime: Date;
+  createdAt: Date;
+  updatedAt: Date;
 }
 
 export interface BridgeFighterInfo {
-  id: string;
+  id: number;
+  bridgeId: string;
+  bridgeName: string;
+  userId: string;
+  bloodGroup: string;
+  frequencyInDays: string;
+  noUnits: number;
+  isActive: boolean;
+  createdAt: Date;
+  updatedAt: Date;
+  user?: User;
+}
+
+export interface BridgeUserMapping {
+  id: number;
   bridgeId: string;
   userId: string;
-  bloodGroup: BloodGroup;
-  donationFrequency: number; // in days
-  lastDonationDate: string;
-  nextDonationDate: string;
+  role: string;
   isActive: boolean;
+  createdAt: Date;
+  updatedAt: Date;
+  user?: User;
+  bridgeFighterInfo?: BridgeFighterInfo;
+}
+
+export interface DonationTracker {
+  id: number;
+  userId: string;
+  donationDate: Date;
+  nextEligibleDate: Date;
+  donationType: string;
+  bridgeId: string;
+  donationStatus: string;
+  createdAt: Date;
+  updatedAt: Date;
+  user?: User;
+  bridgeFighterInfo?: BridgeFighterInfo;
 }
 
 export interface EmergencyRequest {
   id: string;
-  requesterName: string;
-  requesterContact: string;
-  bloodGroup: BloodGroup;
-  units: number;
-  urgency: 'Low' | 'Medium' | 'High' | 'Critical';
+  requesterId: string;
+  patientName: string;
+  bloodGroup: string;
+  unitsRequired: number;
+  urgencyLevel: string;
   location: string;
-  latitude: number;
-  longitude: number;
-  status: 'Pending' | 'Matched' | 'Completed' | 'Cancelled';
-  matchedDonors?: string[];
-  createdAt: string;
-  updatedAt: string;
-}
-
-export interface DonorMatch {
-  userId: string;
-  userName: string;
-  bloodGroup: BloodGroup;
-  distance: number; // in km
-  lastDonationDate: string;
-  nextEligibleDate: string;
   contactNumber: string;
-  matchScore: number; // 0-100
+  hospitalName?: string;
+  status: string;
+  description?: string;
+  requiredBy: Date;
+  createdAt: Date;
+  updatedAt: Date;
+  requester?: User;
 }
 
-export interface Analytics {
-  totalDonors: number;
-  activeDonors: number;
-  inactiveDonors: number;
-  totalDonations: number;
-  pendingDonations: number;
-  completedDonations: number;
-  rejectedDonations: number;
-  bloodGroupDistribution: Record<BloodGroup, number>;
-  cityDistribution: Record<string, number>;
-  genderDistribution: Record<string, number>;
-  monthlyDonations: Array<{
-    month: string;
-    count: number;
-  }>;
-  bridgeStats: Array<{
-    bridgeId: string;
-    bridgeName: string;
-    activeDonors: number;
-    totalDonations: number;
-  }>;
-}
-
-export interface ChatMessage {
+export interface RequestResponse {
   id: string;
-  userId: string;
-  message: string;
-  isUser: boolean;
-  timestamp: string;
-  attachments?: string[];
+  requestId: string;
+  responderId: string;
+  status: string;
+  message?: string;
+  createdAt: Date;
+  updatedAt: Date;
+  request?: EmergencyRequest;
+  responder?: User;
 }
 
 export interface Notification {
@@ -114,34 +90,96 @@ export interface Notification {
   userId: string;
   title: string;
   message: string;
-  type: 'info' | 'success' | 'warning' | 'error';
+  type: string;
   isRead: boolean;
-  createdAt: string;
+  createdAt: Date;
+  updatedAt: Date;
+  user?: User;
 }
 
-export type BloodGroup = 'A+' | 'A-' | 'B+' | 'B-' | 'AB+' | 'AB-' | 'O+' | 'O-';
-
-export type UserRole = 'Bridge Donor' | 'Emergency Donor' | 'Fighter' | 'Admin' | 'Coordinator';
-
-export type DonationType = 'Blood Bridge Donation' | 'Voluntary Donation' | 'Emergency Donation';
-
-export type DonationStatus = 'Pending' | 'Complete' | 'Rejected' | 'Cancelled';
-
+// Frontend specific types
+export interface DonorMatch {
+  user: User;
+  distance: number;
+  lastDonation?: DonationTracker;
+  isEligible: boolean;
+  compatibilityScore: number;
+  matchScore?: number;
+}
 export interface DashboardStats {
   totalUsers: number;
+  totalDonors: number;
+  emergencyDonors: number;
+  bridgeDonors: number;
+  fighters: number;
   activeBridges: number;
   emergencyRequests: number;
   pendingDonations: number;
-  bloodAvailability: Record<BloodGroup, number>;
+  completedDonations: number;
+  totalDonations: number;
 }
 
-export interface SearchFilters {
-  bloodGroup?: BloodGroup;
-  city?: string;
-  role?: UserRole;
-  status?: 'active' | 'inactive';
-  dateRange?: {
-    start: string;
-    end: string;
-  };
+export interface Analytics {
+  totalDonations: number;
+  activeUsers: number;
+  emergencyRequests: number;
+  successRate: number;
+  averageResponseTime: number;
+  monthlyDonations: Array<{
+    month: string;
+    donations: number;
+  }>;
+  bloodGroupDistribution: Array<{
+    bloodGroup: string;
+    count: number;
+  }>;
+  cityWiseStats: Array<{
+    city: string;
+    donors: number;
+    requests: number;
+  }>;
+}
+
+// Form types for creating/editing
+export interface CreateUserForm {
+  name: string;
+  gender: string;
+  mobile: string;
+  dateOfBirth: string;
+  bloodGroup: string;
+  city: string;
+  pincode: number;
+  role: string;
+}
+
+export interface CreateEmergencyRequestForm {
+  patientName: string;
+  bloodGroup: string;
+  unitsRequired: number;
+  urgencyLevel: string;
+  location: string;
+  contactNumber: string;
+  hospitalName?: string;
+  description?: string;
+  requiredBy: string;
+}
+
+export interface UpdateUserForm extends Partial<CreateUserForm> {
+  userId: string;
+}
+
+// API Response types
+export interface ApiResponse<T> {
+  success: boolean;
+  data?: T;
+  error?: string;
+  message?: string;
+}
+
+export interface PaginatedResponse<T> {
+  data: T[];
+  total: number;
+  page: number;
+  limit: number;
+  totalPages: number;
 }

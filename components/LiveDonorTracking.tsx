@@ -1,51 +1,40 @@
 'use client';
 
-import { useState, useEffect, useRef } from 'react';
-import { motion, AnimatePresence } from 'framer-motion';
-import { 
-  MapPin, 
-  Navigation, 
-  Clock, 
-  Phone, 
-  Heart,
-  User,
-  Car,
-  AlertTriangle,
-  CheckCircle
-} from 'lucide-react';
-import { mockUsers } from '@/lib/mockData';
-import { getBloodGroupColor, calculateDistance } from '@/utils/helpers';
-import GoogleMapsIntegration from './GoogleMapsIntegration';
+import { useEffect, useRef, useState } from 'react';
+import { motion } from 'framer-motion';
+import { MapPin, Navigation, Clock, Shield, Eye, EyeOff, Users, AlertTriangle } from 'lucide-react';
 
-interface DonorJourney {
+interface AnonymousDonor {
   id: string;
-  donorId: string;
-  donorName: string;
   bloodGroup: string;
-  startLat: number;
-  startLng: number;
-  endLat: number;
-  endLng: number;
-  currentLat: number;
-  currentLng: number;
-  progress: number; // 0-100
-  status: 'starting' | 'traveling' | 'arrived' | 'donating' | 'completed';
-  startTime: Date;
-  estimatedArrival: Date;
-  actualArrival?: Date;
-  contactNumber: string;
+  lat: number;
+  lng: number;
+  status: 'starting' | 'traveling' | 'nearby' | 'arrived' | 'donating';
+  eta: string;
   distance: number;
+  progress: number;
+  speed: number; // km/h
+  donorCode: string; // Anonymous identifier like "D001", "D002"
 }
 
 interface LiveDonorTrackingProps {
   isVisible: boolean;
   onClose: () => void;
+  anonymousDonors?: AnonymousDonor[];
+  hospitalLocation: { lat: number; lng: number };
+  hospitalName: string;
   emergencyRequest?: {
     bloodGroup: string;
+    urgency: 'low' | 'medium' | 'high' | 'critical';
+    patientCode: string;
     location: string;
-    hospitalLat: number;
-    hospitalLng: number;
   };
+}
+
+declare global {
+  interface Window {
+    google: any;
+  }
 }
 
 export default function LiveDonorTracking({ isVisible, onClose, emergencyRequest }: LiveDonorTrackingProps) {
