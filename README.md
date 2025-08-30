@@ -261,8 +261,8 @@ This project is licensed under the MIT License - see the [LICENSE](LICENSE) file
 ## 🆘 Support
 
 For support and questions:
-- **Email**: support@bloodbridge.com
-- **Emergency Hotline**: +91 98765 43210
+- **Email**: omkarchoudhury0706@gmail.com
+- **Emergency Hotline**: +91 7789056907
 - **Documentation**: [docs.bloodbridge.com](https://docs.bloodbridge.com)
 
 ## 🙏 Acknowledgments
